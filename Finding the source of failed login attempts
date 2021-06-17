@@ -1,0 +1,35 @@
+create or replace trigger logon_denied_to_alert
+after servererror on database
+declare
+ message   varchar2(120);
+ IP        varchar2(15);
+ v_os_user varchar2(80);
+ v_module  varchar2(50);
+ v_action  varchar2(50);
+ v_pid     varchar2(10);
+ v_sid     number;
+ v_username  varchar2(50);
+ v_suser      varchar2(50);
+begin
+ IF (ora_is_servererror(1017)) THEN
+   if sys_context('userenv', 'network_protocol') = 'tcp' then
+     IP := sys_context('userenv', 'ip_address');
+   else
+     select distinct sid into v_sid from sys.v_$mystat;
+     SELECT p.SPID
+       into v_pid
+       FROM V$PROCESS p, V$SESSION v
+      WHERE p.ADDR = v.PADDR
+        AND v.sid = v_sid;
+   end if;
+   v_os_user := sys_context('userenv', 'os_user');
+   v_username := sys_context('userenv', 'CURRENT_USER');
+   v_suser := SYS_CONTEXT('USERENV','SESSION_USER');
+   dbms_application_info.READ_MODULE(v_module, v_action);
+   message := to_char(sysdate, 'Dy Mon dd HH24:MI:SS YYYY') ||
+              ' logon denied from '||v_username||' '||v_suser||' '|| nvl(IP, v_pid) || ' ' || v_os_user ||
+              ' with ' || v_module || ' ' || v_action;
+   sys.dbms_system.ksdwrt(2, message);
+ end if;
+end;
+/
